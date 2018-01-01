@@ -14,18 +14,47 @@ vhdlparser [ -f | -F ] source
 
 ## Example
 
-Input file:
+Input file `memory.vhdl`:
 
 ~~~~~~~~~~
-  1 TBD
-  2 Line 2
-  3 ...
+  1 library IEEE;
+  2 use IEEE.STD_LOGIC_1164.ALL;
+  3
+  4 entity memory is
+  5 port (
+	 6     re : in std_logic;
+  7     we : in std_logic;
+  8     a : in std_logic_vector(7 downto 0);
+  9     d : in std_logic_vector(7 downto 0);
+	10     q : out std_logic_vector(7 downto 0)
+ 11 );
+ 12 end reg;
+ 13
+ 14 architecture Behavioral of memory is
+ 15 type ram_type is array (0 to 63, 128 to 255) of std_logic_vector(7 downto 0);
+ 16 signal ram : ram_type;
+ 17 begin
+ 18
+ 19 process (we, re, a)
+	20 begin
+	21 if we = '1' then
+ 22     ram(to_integer(unsigned(a))) <= d;
+	23 end if;
+ 24
+	25 if re = '1' then
+	26     q <= ram(to_integer(unsigned(a)));
+	27 end if;
+ 28 end process;
+ 29
+ 30 end Behavioral;
 ~~~~~~~~~~
 
 Generated annotations:
 
 ~~~~~~~~~~
-TBD
+memory.vhdl:22: -- psl always ((to_integer(unsigned(a))) >= 0) and ((to_integer(unsigned(a))) <= 63)) or ((to_integer(unsigned(a))) >= 128) and ((to_integer(unsigned(a))) <= 255))
+memory.vhdl:22: -- psl always false // 'd' controls output yet it is not in sensitivity list
+memory.vhdl:26: -- psl always ((to_integer(unsigned(a))) >= 0) and ((to_integer(unsigned(a))) <= 63)) or ((to_integer(unsigned(a))) >= 128) and ((to_integer(unsigned(a))) <= 255))
 ~~~~~~~~~~
 
 ## List of Created Annotations
@@ -41,9 +70,6 @@ TBD
 
 Please use an included IntelliJ IDEA project. ANTLR4 library is necessary
 for compilation.
-
-## References
- * ...
  
 
 
