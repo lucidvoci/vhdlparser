@@ -16,38 +16,40 @@ vhdlparser [ -f | -F ] source
 
 Input file `memory.vhdl`:
 
-~~~~~~~~~~
-  1 library IEEE;
-  2 use IEEE.STD_LOGIC_1164.ALL;
-  3
-  4 entity memory is
-  5 port (
-	 6     re : in std_logic;
-  7     we : in std_logic;
-  8     a : in std_logic_vector(7 downto 0);
-  9     d : in std_logic_vector(7 downto 0);
-	10     q : out std_logic_vector(7 downto 0)
- 11 );
- 12 end reg;
- 13
- 14 architecture Behavioral of memory is
- 15 type ram_type is array (0 to 63, 128 to 255) of std_logic_vector(7 downto 0);
- 16 signal ram : ram_type;
- 17 begin
- 18
- 19 process (we, re, a)
-	20 begin
-	21 if we = '1' then
- 22     ram(to_integer(unsigned(a))) <= d;
-	23 end if;
- 24
-	25 if re = '1' then
-	26     q <= ram(to_integer(unsigned(a)));
-	27 end if;
- 28 end process;
- 29
- 30 end Behavioral;
-~~~~~~~~~~
+
+```vhdl
+library IEEE;
+use IEEE.STD_LOGIC_1164.ALL;
+
+entity memory is
+port (
+    re : in std_logic;
+    we : in std_logic;
+    a : in std_logic_vector(7 downto 0);
+    d : in std_logic_vector(7 downto 0);
+    q : out std_logic_vector(7 downto 0)
+);
+end memory;
+
+architecture Behavioral of memory is
+type ram_type is array (0 to 63, 128 to 255) of std_logic_vector(7 downto 0);
+signal ram : ram_type;
+begin
+
+process (we, re, a)
+    begin
+    if we = '1' then
+        ram(to_integer(unsigned(a))) <= d;
+    end if;
+
+    if re = '1' then
+        q <= ram(to_integer(unsigned(a)));
+    end if;
+end process;
+
+end Behavioral;
+```
+
 
 Generated annotations:
 
