@@ -4,6 +4,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 public class SymbolTable {
@@ -52,5 +53,19 @@ public class SymbolTable {
             return false;
 
         return put(id, new Symbol(id, Symbol.Type.SIGNAL, Symbol.Subtype.SCALAR));
+    }
+
+    public boolean putTypeArray(@Nullable String id, @Nullable List<Integer> ranges) {
+        if (id == null || ranges == null)
+            return false;
+
+        return put(id, new Symbol(id, Symbol.Type.TYPE, Symbol.Subtype.ARRAY, ranges));
+    }
+
+    public boolean putSignalCustom(@Nullable String id, @Nullable String customTypeId) {
+        if (id == null || customTypeId == null)
+            return false;
+
+        return put(id, new Symbol(id, Symbol.Type.SIGNAL, Symbol.Subtype.CUSTOM, customTypeId));
     }
 }

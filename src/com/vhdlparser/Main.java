@@ -30,6 +30,7 @@ public class Main {
             printHelp();
             return;
         }
+
         vhdlLexer lexer = new vhdlLexer(new ANTLRFileStream(file.toString()));
         CommonTokenStream tokens = new CommonTokenStream(lexer);
         vhdlParser parser = new vhdlParser(tokens);
@@ -39,7 +40,7 @@ public class Main {
     }
 
     static void printHelp () {
-        System.out.println("vhdlparser [-f-F] source");
+        System.out.println("vhdlparser [ -f | -F ] source");
         System.out.println("\t -h\t this help");
         System.out.println("\t -f\t vhdl file source");
         System.out.println("\t -F\t folder with vhdl file source");

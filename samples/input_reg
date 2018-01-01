@@ -18,6 +18,8 @@ end reg;
 architecture Behavioral of reg is
 signal dummy : std_logic_vector(5 downto 0);
 signal d2 : std_logic_vector(2 downto 0);
+type ram_type is array (0 to 31, 120 to 127) of std_logic_vector(7 downto 0);
+signal ram : ram_type;
 begin
 
 process (clk, a)
@@ -37,6 +39,7 @@ process (en, d, d2)
 	    q1 <= q2 + 1 + d2;
 	    q1 <= en;
 	    dummy(to_integer(unsigned(d2))) <= '1';
+	    ram(to_integer(unsigned(d))) <= "01010101";
 	end if;
 end process;
 

@@ -3,10 +3,7 @@ package com.vhdlparser;
 import sun.jvm.hotspot.debugger.cdbg.Sym;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.HashSet;
-import java.util.List;
+import java.util.*;
 
 public class vhdlWalker extends vhdlBaseListener {
 
@@ -35,6 +32,13 @@ public class vhdlWalker extends vhdlBaseListener {
     private Integer current_range_max = null;
     private boolean in_name_part;
     private Symbol current_symbol = null;
+    private boolean in_type_decl;
+    private boolean in_type_def;
+    private String currently_declared_type;
+    private boolean in_constrained_array_def;
+    private List<Integer> current_ranges;
+    private Integer index_constraint_cnt = null;
+    private String current_customtype;
 
     public vhdlWalker (String srcFile) {
         this.srcFile = srcFile;
@@ -115,20 +119,38 @@ public class vhdlWalker extends vhdlBaseListener {
                 currently_declared_signals.add(id);
 
             if (in_subtype_decl) {
-                String subtype = ctx.getText();
+                String subtype = id;
+
+                //System.out.println(id);
 
                 switch (subtype) {
                     case "std_logic_vector":
                         current_subtype = Symbol.Subtype.VECTOR;
+                        current_customtype = null;
                         break;
                     case "std_logic":
                         current_subtype = Symbol.Subtype.SCALAR;
+                        current_customtype = null;
                         break;
                     default:
-                        current_subtype = null;
+                        Symbol symbol = SymbolTable.get().lookUp(subtype);
+                        if (symbol != null && symbol.getType() == Symbol.Type.TYPE) {
+                            current_subtype = Symbol.Subtype.CUSTOM;
+                            current_customtype = subtype;
+                        }
+                        else
+                        {
+                            current_subtype = null;
+                            current_customtype = null;
+                        }
                         break;
                 }
             }
+        }
+        
+        if (in_type_decl) {
+            if (!in_type_def)
+                currently_declared_type = id;
         }
 
         if (in_name_part) {
@@ -255,6 +277,8 @@ public class vhdlWalker extends vhdlBaseListener {
         //System.out.println(String.join(", ", currently_declared_signals));
         //System.out.println("as");
         //System.out.println(current_subtype);
+        //System.out.println("customtype");
+        //System.out.println(current_customtype);
         //System.out.println("range");
         //System.out.println(current_range_min);
         //System.out.println(current_range_max);
@@ -266,10 +290,14 @@ public class vhdlWalker extends vhdlBaseListener {
         else if (current_subtype == Symbol.Subtype.SCALAR) {
             currently_declared_signals.stream().forEach(x -> SymbolTable.get().putSignalScalar(x));
         }
+        else if (current_subtype == Symbol.Subtype.CUSTOM && current_customtype != null) {
+            currently_declared_signals.stream().forEach(x -> SymbolTable.get().putSignalCustom(x, current_customtype));
+        }
 
         in_sig_decl = false;
         currently_declared_signals = null;
         current_subtype = null;
+        current_customtype = null;
         current_range_min = null;
         current_range_max = null;
     }
@@ -298,7 +326,7 @@ public class vhdlWalker extends vhdlBaseListener {
 
     @Override
     public void enterSimple_expression(vhdlParser.Simple_expressionContext ctx) {
-        if (in_subtype_decl && in_explicit_range) {
+        if ((in_subtype_decl || in_type_def) && in_explicit_range) {
             if (simple_expression_cnt != null) {
                 if (simple_expression_cnt == 0) {
                     try {
@@ -316,7 +344,8 @@ public class vhdlWalker extends vhdlBaseListener {
                         current_range_max = null;
                     }
 
-                    if (current_range_max != null && current_range_min != null) {
+                    if (current_range_max != null && current_range_min != null &&
+                            current_range_min > current_range_max) {
                         Integer tmp = current_range_max;
                         current_range_max = current_range_min;
                         current_range_min = tmp;
@@ -330,10 +359,34 @@ public class vhdlWalker extends vhdlBaseListener {
 
     @Override
     public void enterName_function_call_or_indexed_part(vhdlParser.Name_function_call_or_indexed_partContext ctx) {
-        if (current_symbol != null && current_symbol.getType() == Symbol.Type.SIGNAL && current_symbol.getSubtype() == Symbol.Subtype.VECTOR) {
-            String rhs = ctx.getText();
-            process.annotations.add(new Annotation(String.format("-- psl always (%s >= %d) and (%s <= %d)", rhs, current_symbol.getRangeLow(), rhs, current_symbol.getRangeMax()), ctx.getStart().getLine(), srcFile));
+        if (current_symbol == null)
+            return;
 
+        if (current_symbol.getType() == Symbol.Type.SIGNAL) {
+            if (current_symbol.getSubtype() == Symbol.Subtype.VECTOR) {
+                String rhs = ctx.getText();
+                process.annotations.add(new Annotation(String.format("-- psl always (%s >= %d) and (%s <= %d)", rhs,
+                        current_symbol.getRangeLow(), rhs, current_symbol.getRangeMax()), ctx.getStart().getLine(), srcFile));
+            }
+
+            if (current_symbol.getSubtype() == Symbol.Subtype.CUSTOM) {
+                String typeName = current_symbol.getCustomTypeId();
+                if (typeName != null) {
+                    Symbol type = SymbolTable.get().lookUp(typeName);
+                    if (type.getSubtype() == Symbol.Subtype.ARRAY && type.getRanges() != null) {
+                        Iterator<Integer> iter = type.getRanges().iterator();
+                        List<String> clauses = new ArrayList<>();
+                        String rhs = ctx.getText();
+                        while (iter.hasNext()) {
+                            clauses.add(String.format("(%s >= %d) and (%s <= %d))", rhs, iter.next(), rhs, iter.next()));
+                        }
+
+                        process.annotations.add(new Annotation("-- psl always " + String.join(" or ", clauses),
+                                ctx.getStart().getLine(), srcFile));
+                    }
+                }
+
+            }
         }
 
         current_symbol = null;
@@ -342,6 +395,64 @@ public class vhdlWalker extends vhdlBaseListener {
     @Override
     public void exitName_part(vhdlParser.Name_partContext ctx) {
         in_name_part = false;
+    }
+
+    @Override
+    public void enterType_declaration(vhdlParser.Type_declarationContext ctx) {
+        in_type_decl = true;
+
+        current_ranges = new ArrayList<>();
+        current_range_min = null;
+        current_range_max = null;
+        index_constraint_cnt = 0;
+    }
+
+    @Override
+    public void exitType_declaration(vhdlParser.Type_declarationContext ctx) {
+        in_type_decl = false;
+
+        //System.out.println(currently_declared_type);
+        //System.out.println(current_ranges);
+        SymbolTable.get().putTypeArray(currently_declared_type, current_ranges);
+
+        currently_declared_type = null;
+        current_ranges = null;
+        index_constraint_cnt = null;
+    }
+
+    @Override
+    public void enterType_definition(vhdlParser.Type_definitionContext ctx) {
+        in_type_def = true;
+    }
+
+    @Override
+    public void exitType_definition(vhdlParser.Type_definitionContext ctx) {
+        in_type_def = false;
+    }
+    
+    @Override
+    public void enterConstrained_array_definition(vhdlParser.Constrained_array_definitionContext ctx) {
+        in_constrained_array_def = true;
+    }
+
+    @Override
+    public void exitConstrained_array_definition(vhdlParser.Constrained_array_definitionContext ctx) {
+        in_constrained_array_def = false;
+    }
+
+    @Override
+    public void exitIndex_constraint(vhdlParser.Index_constraintContext ctx) {
+        if (index_constraint_cnt != null)
+            index_constraint_cnt++;
+    }
+    
+    @Override
+    public void exitDiscrete_range(vhdlParser.Discrete_rangeContext ctx) {
+        if (in_type_def && in_constrained_array_def && index_constraint_cnt == 0 &&
+                current_range_min != null && current_range_max != null) {
+            current_ranges.add(current_range_min);
+            current_ranges.add(current_range_max);
+        }
     }
 }
 
